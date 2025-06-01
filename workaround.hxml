@@ -1,2 +1,3 @@
 --class-path ./
+--define hscriptPos
 # just so my autocomplete can run.

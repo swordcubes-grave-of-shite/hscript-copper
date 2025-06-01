@@ -41,6 +41,7 @@ enum Token {
 	TDoubleDot;
 	TMeta( s : String );
 	TPrepro( s : String );
+	TInterpString( t : Array<Token> );
 }
 
 class Parser {
@@ -478,6 +479,36 @@ class Parser {
 		case TMeta(id) if( allowMetadata ):
 			var args = parseMetaArgs();
 			return mk(EMeta(id, args, parseExpr()),p1);
+		case TInterpString(t):
+			var tokIdx = t.length - 1;
+			inline function interpToken():Expr {
+				return switch (t[tokIdx]) {
+					case TConst(c):
+						--tokIdx;
+						mk(EConst(c));
+					case TId(s):
+						--tokIdx;
+						mk(EIdent(s));
+					case TBrClose:
+						--tokIdx;
+						push(TBrClose);
+						while ( tokIdx >= 0 && t[tokIdx] != TBrOpen) {
+							push(t[tokIdx]);
+							--tokIdx;
+						}
+						--tokIdx;
+						
+						var exprs:Array<Expr> = parseExprList(TBrClose);
+						mk(EBlock(exprs));
+					default: unexpected(t[tokIdx]);
+				}
+			}
+			var curExpr:Expr = interpToken();
+
+			while ( tokIdx >= 0 )
+				curExpr = mk(EBinop("+", interpToken(), curExpr));
+
+			return curExpr;
 		default:
 			return unexpected(tk);
 		}
@@ -1330,37 +1361,30 @@ class Parser {
 		return StringTools.fastCodeAt(input, readPos++);
 	}
 
-	function readString( until ) {
-		var c = 0;
-		var b = new StringBuf();
-		var esc = false;
-		var old = line;
-		var s = input;
-		#if hscriptPos
-		var p1 = currentPos - 1;
-		#end
-		while( true ) {
-			var c = readChar();
-			if( StringTools.isEof(c) ) {
-				line = old;
-				error(EUnterminatedString, p1, p1);
-				break;
-			}
-			if( esc ) {
-				esc = false;
-				switch( c ) {
-				case 'n'.code: b.addChar('\n'.code);
-				case 'r'.code: b.addChar('\r'.code);
-				case 't'.code: b.addChar('\t'.code);
-				case "'".code, '"'.code, '\\'.code: b.addChar(c);
-				case '/'.code: if( allowJSON ) b.addChar(c) else invalidChar(c);
-				case "u".code:
-					if( !allowJSON ) invalidChar(c);
-					var k = 0;
-					for( i in 0...4 ) {
-						k <<= 4;
-						var char = readChar();
-						switch( char ) {
+	inline function readEscape(addChar:Int->Void, c:Int, old:Int #if hscriptPos ,p1:Int #end) {
+		switch( c ) {
+			case 'n'.code:
+				addChar('\n'.code);
+			case 'r'.code:
+				addChar('\r'.code);
+			case 't'.code:
+				addChar('\t'.code);
+			case "'".code, '"'.code, '\\'.code:
+				addChar(c);
+			case '/'.code:
+				if( allowJSON )
+					addChar(c)
+				else
+					invalidChar(c);
+			case "u".code:
+				if( !allowJSON )
+					invalidChar(c);
+
+				var k = 0;
+				for( i in 0...4 ) {
+					k <<= 4;
+					final char = readChar();
+					switch( char ) {
 						case 48,49,50,51,52,53,54,55,56,57: // 0-9
 							k += char - 48;
 						case 65,66,67,68,69,70: // A-F
@@ -1373,19 +1397,127 @@ class Parser {
 								error(EUnterminatedString, p1, p1);
 							}
 							invalidChar(char);
-						}
 					}
-					b.addChar(k);
-				default: invalidChar(c);
 				}
+				addChar(k);
+			default:
+				invalidChar(c);
+		}
+	}
+
+	function readInterpString() {
+		var curStr = "";
+		function addChar(code) {
+			curStr += String.fromCharCode(code);
+		}
+
+		var toks:Array<Token> = [];
+		var getVar:Bool = false;
+
+		var esc = false;
+		final old = line;
+		#if hscriptPos
+		final p1 = currentPos - 1;
+		#end
+		var c = readChar();
+		while( esc || c != "'".code ) {
+			if( StringTools.isEof(c) ) {
+				line = old;
+				error(EUnterminatedString, p1, p1);
+				break;
+			}
+
+			if( esc ) {
+				esc = false;
+				readEscape(addChar, c, old #if hscriptPos ,p1 #end);
+			} else if( c == "\\".code ) {
+				if ( getVar ) {
+					toks.push(TId(curStr));
+					curStr = "";
+				}
+
+				esc = true;
+			} else if (c == "$".code) {
+				toks.push(getVar ? TId(curStr) : TConst(CString(curStr)));
+				curStr = "";
+				final nextChar = readChar();
+				switch (nextChar) {
+					case '$'.code:
+						toks.push(getVar ? TId(curStr) : TConst(CString(curStr)));
+						curStr = "";
+						toks.push(TConst(CString("$")));
+					case "'".code: // give us $ and stop the loop
+						curStr += "$";
+						break;
+					case '{'.code:
+						toks.push(getVar ? TId(curStr) : TConst(CString(curStr)));
+						curStr = "";
+
+						toks.push(TBrOpen);
+
+						var tok = token();
+						toks.push(tok);
+						while (tok != TBrClose) {
+							tok = token();
+							toks.push(tok);
+						}
+					case 48,49,50,51,52,53,54,55,56,57: // 0...9 (continue)
+						addChar(nextChar);
+					default: 
+						if ( idents[nextChar] ) {
+							toks.push(getVar ? TId(curStr) : TConst(CString(curStr)));
+							curStr = "";
+							getVar = true;
+						} else if( nextChar == 10 ) // if not an ident lets just move on
+							line++;
+						addChar(nextChar);
+				}
+			} else {
+				if ( getVar && !idents[c] ) {
+					toks.push(TId(curStr));
+					curStr = "";
+					getVar = false;
+				}
+
+				if( c == 10 ) line++;
+				addChar(c);
+			}
+			c = readChar();
+		}
+		toks.push(getVar ? TId(curStr) : TConst(CString(curStr)));
+
+		return toks;
+	}
+
+	function readString() {
+		var b = new StringBuf();
+		function addChar(code) {
+			b.addChar(code);
+		}
+		
+		var esc = false;
+		final old = line;
+		#if hscriptPos
+		final p1 = currentPos - 1;
+		#end
+		var c = readChar();
+		while( esc || c != '"'.code ) {
+			if( StringTools.isEof(c) ) {
+				line = old;
+				error(EUnterminatedString, p1, p1);
+				break;
+			}
+
+			if( esc ) {
+				esc = false;
+				readEscape(addChar, c, old #if hscriptPos ,p1 #end);
 			} else if( c == 92 )
 				esc = true;
-			else if( c == until )
-				break;
 			else {
 				if( c == 10 ) line++;
-				b.addChar(c);
+				addChar(c);
 			}
+			c = readChar();
 		}
 		return b.toString();
 	}
@@ -1532,7 +1664,8 @@ class Parser {
 			case "}".code: return TBrClose;
 			case "[".code: return TBkOpen;
 			case "]".code: return TBkClose;
-			case "'".code, '"'.code: return TConst( CString(readString(char)) );
+			case '"'.code: return TConst( CString(readString()) );
+			case "'".code: return TInterpString( readInterpString() );
 			case "?".code:
 				char = readChar();
 				if( char == ".".code )
@@ -1754,24 +1887,25 @@ class Parser {
 
 	function tokenString( t ) {
 		return switch( t ) {
-		case TEof: "<eof>";
-		case TConst(c): constString(c);
-		case TId(s): s;
-		case TOp(s): s;
-		case TPOpen: "(";
-		case TPClose: ")";
-		case TBrOpen: "{";
-		case TBrClose: "}";
-		case TDot: ".";
-		case TQuestionDot: "?.";
-		case TComma: ",";
-		case TSemicolon: ";";
-		case TBkOpen: "[";
-		case TBkClose: "]";
-		case TQuestion: "?";
-		case TDoubleDot: ":";
-		case TMeta(id): "@" + id;
-		case TPrepro(id): "#" + id;
+			case TEof: "<eof>";
+			case TConst(c): constString(c);
+			case TId(s): s;
+			case TOp(s): s;
+			case TPOpen: "(";
+			case TPClose: ")";
+			case TBrOpen: "{";
+			case TBrClose: "}";
+			case TDot: ".";
+			case TQuestionDot: "?.";
+			case TComma: ",";
+			case TSemicolon: ";";
+			case TBkOpen: "[";
+			case TBkClose: "]";
+			case TQuestion: "?";
+			case TDoubleDot: ":";
+			case TMeta(id): "@" + id;
+			case TPrepro(id): "#" + id;
+			case TInterpString(t): [for (tok in t) tokenString(tok)].join(""); // ill have to make this correct later
 		}
 	}
 
