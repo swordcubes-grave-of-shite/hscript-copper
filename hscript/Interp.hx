@@ -558,7 +558,6 @@ class Interp {
 			var c = Type.resolveClass(name);
 			if( c == null ) c = resolve(name);
 
-			Sys.println(name + " | " + c + " | " + Type.getClassFields(c));
 			for (field in Type.getClassFields(c)) {
 				final func:Function = Reflect.getProperty(c, field);
 				if ( Reflect.isFunction(func) )

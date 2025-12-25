@@ -168,6 +168,11 @@ class JsInterp extends Interp {
 			return exprValue(e)+"."+f;
 		case EField(e, f):
 			return '$$i.get(${exprValue(e)},"$f")';
+		case EInterpStr(vals):
+			var str = '';
+			for (i in 0...vals.length)
+				str += exprJS(vals[i]) + (i == vals.length - 1 ? "" : " + "); // just "inline" it. i don't wanna try converting string interp in string interp.
+			return str;
 		case EBinop(op, e1, e2):
 			switch( op ) {
 			case "+","-","*","/","%","&","|","^",">>","<<",">>>","==","!=",">=","<=",">","<":
