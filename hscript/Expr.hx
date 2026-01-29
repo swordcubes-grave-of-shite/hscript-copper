@@ -59,7 +59,7 @@ enum Expr {
 	EReturn( ?e : Expr );
 	EArray( e : Expr, index : Expr );
 	EArrayDecl( e : Array<Expr> );
-	ENew( cl : String, params : Array<Expr> );
+	ENew( cl : String, params : Array<Expr>, ?args : Array<CType> );
 	EThrow( e : Expr );
 	ETry( e : Expr, v : String, t : Null<CType>, ecatch : Expr );
 	EObject( fl : Array<{ name : String, e : Expr }> );
@@ -70,6 +70,8 @@ enum Expr {
 	EImport( name : String, ?rename : String);
 	EUsing( name : String );
 	ECheckType( e : Expr, t : CType );
+	EForGen( it : Expr, e : Expr );
+	ECast( e : Expr, ?t : CType );
 }
 
 typedef Argument = { name : String, ?t : CType, ?opt : Bool, ?value : Expr };
@@ -123,7 +125,7 @@ enum Error {
 
 enum ModuleDecl {
 	DPackage( path : Array<String> );
-	DImport( path : Array<String>, ?everything : Bool );
+	DImport( path : Array<String>, ?everything : Bool, ?name : String );
 	DClass( c : ClassDecl );
 	DTypedef( c : TypeDecl );
 }

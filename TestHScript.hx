@@ -134,10 +134,17 @@ class TestHScript extends TestCase {
 		assertScript("false && xxx", false);
 		assertScript("true || xxx", true);
 		assertScript("[for( x in arr ) switch( x ) { case 1: 55; case 3: 66; default: 0; }].join(':')",'55:0:66',{ arr : [1,2,3] });
+		assertScript("switch( x ) { case 1: 55; case 3: 66; default: 0; }",66 ,{ x : 3 });
+		assertScript("var a = 1; switch( b ) { default: a = 2; }; a", 2, { b : 2 });
+		assertScript("var a = 1; switch( b ) { case 2: a = 100; default: a = 2; }; a", 100, { b : 2 });
+		assertScript("var a = 3; switch( b ) { case 2: if (a == 1) { a = 100; } else { a = 99; }; default: a = 2; }; a", 99, { b : 2 });
 	}
 
 	function testNullFieldAccess():Void {
-		var pt = {x : 10};
+		var pt = {
+			x : 10,
+			call : function() { return 11; }
+		};
 		var vars = {
 			ptnull : null,
 			pt: pt,
@@ -145,11 +152,22 @@ class TestHScript extends TestCase {
 			pt2: {pt : pt}
 		}
 		assertScript("ptnull?.x", null, vars);
+		assertScript("ptnull?.pt.x", null, vars);
+		assertScript("ptnull?.call()", null, vars);
+		assertScript("ptnull?.pt.call()", null, vars);
 		assertScript("pt?.x", 10, vars);
+		assertScript("pt?.call()", 11, vars);
 		assertScript("pt2null?.pt", null, vars);
 		assertScript("pt2null?.pt?.x", null, vars);
+		assertScript("pt2null?.pt?.call()", null, vars);
 		assertScript("pt2?.pt", pt, vars);
 		assertScript("pt2?.pt?.x", 10, vars);
+		assertScript("pt2?.pt?.call()", 11, vars);
+		assertScript("ptnull ?? 12", 12, vars);
+		assertScript("pt2null.pt ?? 12", 12, vars);
+		assertScript("ptnull?.x ?? 12", 12, vars);
+		assertScript("pt?.x ?? 12", 10, vars);
+		assertScript("pt.y ?? 12", 12, vars);
 	}
 
 	function testIsOperator():Void {

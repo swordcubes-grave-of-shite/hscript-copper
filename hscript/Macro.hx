@@ -109,6 +109,7 @@ class Macro {
 					default: TPType(convertType(t));
 					});
 			}
+			var pack = pack.copy();
 			TPath({
 				pack : pack,
 				name : pack.pop(),
@@ -180,13 +181,10 @@ class Macro {
 			case EDoWhile(c, e):
 				EWhile(convert(c), convert(e), false);
 			case EFor(v, it, efor):
-				#if (haxe_ver >= 4)
-					var p = #if (!macro && hscriptPos) { file : p.file, min : e.pmin, max : e.pmax } #else p #end;
-					EFor({ expr : EBinop(OpIn,{ expr : EConst(CIdent(v)), pos : p },convert(it)), pos : p }, convert(efor));
-				#else
-					var p = #if (!macro && hscriptPos) { file : p.file, min : e.pmin, max : e.pmax } #else p #end;
-					EFor({ expr : EIn({ expr : EConst(CIdent(v)), pos : p },convert(it)), pos : p }, convert(efor));
-				#end
+				var p = #if (!macro && hscriptPos) { file : e.origin, min : e.pmin, max : e.pmax } #else p #end;
+				EFor({ expr : EBinop(OpIn,{ expr : EConst(CIdent(v)), pos : p },convert(it)), pos : p }, convert(efor));
+			case EForGen(it, efor):
+				EFor(convert(it), convert(efor));
 			case EBreak:
 				EBreak;
 			case EContinue:
@@ -229,11 +227,45 @@ class Macro {
 			case ESwitch(e, cases, edef):
 				ESwitch(convert(e), [for( c in cases ) { values : [for( v in c.values ) convert(v)], expr : convert(c.expr) } ], edef == null ? null : convert(edef));
 			case EMeta(m, params, esub):
-				var mpos = #if (!macro && hscriptPos) { file : p.file, min : e.pmin, max : e.pmax } #else p #end;
+				var mpos = #if (!macro && hscriptPos) { file : e.origin, min : e.pmin, max : e.pmax } #else p #end;
 				EMeta({ name : m, params : params == null ? [] : [for( p in params ) convert(p)], pos : mpos }, convert(esub));
 			case ECheckType(e, t):
 				ECheckType(convert(e), convertType(t));
-		}, pos : #if (!macro && hscriptPos) { file : p.file, min : e.pmin, max : e.pmax } #else p #end }
+			case ECast(e, t):
+				ECast(convert(e), t == null ? null : convertType(t));
+		}, pos : #if (!macro && hscriptPos) { file : e.origin, min : e.pmin, max : e.pmax } #else p #end }
+	}
+
+	public function typeEncode( t : ComplexType ) : Expr.CType {
+		switch( t ) {
+		case TPath(p):
+			var path = p.pack.copy();
+			path.push(p.name);
+			if( p.sub != null ) path.push(p.sub);
+			var params : Array<Expr.CType> = null;
+			if( p.params != null && p.params.length > 0 )
+				params = [for( p in p.params ) switch( p ) {
+					case TPType(t): typeEncode(t);
+					case TPExpr(e): CTExpr(null); // TODO : macro expr to hscript expr
+				}];
+			return CTPath(path,params);
+		case TFunction(args, ret):
+			return CTFun([for( a in args ) typeEncode(a)], typeEncode(ret));
+		case TAnonymous(fields):
+			return CTAnon([for( f in fields ) { name : f.name, t : switch( f.kind ) {
+				case FVar(t): typeEncode(t);
+				case FProp(get,set,t,_): typeEncode(t);
+				case FFun(f): CTFun([for( a in f.args ) typeEncode(a.type)],typeEncode(f.ret));
+			}}]);
+		case TParent(t):
+			return CTParent(typeEncode(t));
+		case TOptional(t):
+			return CTOpt(typeEncode(t));
+		case TNamed(n, t):
+			return CTNamed(n,typeEncode(t));
+		case TIntersection(_), TExtend(_):
+			throw "assert";
+		}
 	}
 
 }

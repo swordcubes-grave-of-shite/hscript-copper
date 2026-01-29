@@ -209,6 +209,11 @@ class Printer {
 			expr(it);
 			add(" ) ");
 			expr(e);
+		case EForGen(it, e):
+			add("for( ");
+			expr(it);
+			add(" ) ");
+			expr(e);
 		case EBreak:
 			add("break");
 		case EContinue:
@@ -248,8 +253,17 @@ class Printer {
 				expr(e);
 			}
 			add("]");
-		case ENew(cl, args):
-			add("new " + cl + "(");
+		case ENew(cl, args, targs):
+			add("new " + cl);
+			if( targs != null ) {
+				add('<');
+				var first = true;
+				for( t in targs ) {
+					if( first ) first = false else add(',');
+					addType(t);
+				}
+				add('>');
+			}
 			var first = true;
 			for( e in args ) {
 				if( first ) first = false else add(", ");
@@ -338,6 +352,17 @@ class Printer {
 			add(" : ");
 			addType(t);
 			add(")");
+		case ECast(e,t):
+			if( t == null ) {
+				add("cast ");
+				expr(e);
+			} else {
+				add("cast(");
+				expr(e);
+				add(",");
+				addType(t);
+				add(")");
+			}
 		}
 	}
 

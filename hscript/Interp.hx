@@ -61,6 +61,33 @@ class Interp {
 		initOps();
 	}
 
+	public function allowTypeResolve() {
+		variables.set("$resolve", resolveType);
+	}
+
+	#if js
+	static var ABS_CACHE = new Map();
+	#end
+	function resolveType( path : String ) : Dynamic {
+		#if js
+		// abstract type is not part of the class map
+		if( path.charCodeAt(0) == '#'.code ) {
+			var c = ABS_CACHE.get(path);
+			if( c != null ) return c;
+			c = js.Lib.eval(path.substr(1));
+			if( c != null ) {
+				ABS_CACHE.set(path,c);
+				return c;
+			}
+		}
+		#end
+		var c = std.Type.resolveClass(path);
+		if( c != null ) return c;
+		var e = std.Type.resolveEnum(path);
+		if( e != null ) return e;
+		throw "Invalid type "+path;
+	}
+
 	private function resetVariables(){
 		staticExtensions = new Map<String,Function>();
 
@@ -109,6 +136,10 @@ class Interp {
 		binops.set("=",assign);
 		binops.set("...",function(e1,e2) return new IntIterator(me.expr(e1),me.expr(e2)));
 		binops.set("is",function(e1,e2) return #if (haxe_ver >= 4.2) Std.isOfType #else Std.is #end (me.expr(e1), me.expr(e2)));
+		binops.set("??",function(e1,e2) {
+			var v1 : Dynamic = me.expr(e1);
+			return if( v1 != null ) v1 else me.expr(e2);
+		});
 		assignOp("+=",function(v1:Dynamic,v2:Dynamic) return v1 + v2);
 		assignOp("-=",function(v1:Float,v2:Float) return v1 - v2);
 		assignOp("*=",function(v1:Float,v2:Float) return v1 * v2);
@@ -380,6 +411,18 @@ class Interp {
 		case EFor(v,it,e):
 			forLoop(v,it,e);
 			return null;
+		case EForGen(it,e):
+			Tools.getKeyIterator(it, function(vk,vv,it) {
+				if( vk == null ) {
+					#if hscriptPos
+					curExpr = it;
+					#end
+					error(ECustom("Invalid for expression"));
+					return;
+				}
+				forKeyValueLoop(vk,vv,it,e);
+			});
+			return null;
 		case EBreak:
 			throw SBreak;
 		case EContinue:
@@ -542,8 +585,6 @@ class Interp {
 			if( !match )
 				val = def == null ? null : expr(def);
 			return val;
-		case EMeta(_, _, e):
-			return expr(e);
 		case EImport(name, rename):
 			if ( rename == null ) rename = name.substring(name.lastIndexOf(".") + 1, name.length);
 
@@ -563,10 +604,16 @@ class Interp {
 				if ( Reflect.isFunction(func) )
 					staticExtensions.set(field, func);
 			}
-		case ECheckType(e,_):
+		case EMeta(meta, args, e):
+			return exprMeta(meta, args, e);
+		case ECheckType(e,_), ECast(e,_):
 			return expr(e);
 		}
 		return null;
+	}
+
+	function exprMeta(meta,args,e) : Dynamic {
+		return expr(e);
 	}
 
 	function doWhileLoop(econd,e) {
@@ -589,15 +636,27 @@ class Interp {
 	}
 
 	function makeIterator( v : Dynamic ) : Iterator<Dynamic> {
-		#if ((flash && !flash9) || (php && !php7 && haxe_ver < '4.0.0'))
-		if ( v.iterator != null ) v = v.iterator();
-		#elseif js
+		#if js
 		// don't use try/catch (very slow)
 		if( v is Array )
 			return (v : Array<Dynamic>).iterator();
 		if( v.iterator != null ) v = v.iterator();
 		#else
-		try v = v.iterator() catch( e : Dynamic ) {};
+		#if (cpp) if ( v.iterator != null ) #end
+			try v = v.iterator() catch( e : Dynamic ) {};
+		#end
+		if( v.hasNext == null || v.next == null ) error(EInvalidIterator(v));
+		return v;
+	}
+
+	function makeKeyValueIterator( v : Dynamic ) : KeyValueIterator<Dynamic,Dynamic> {
+		#if js
+		// don't use try/catch (very slow)
+		if( v is Array )
+			return (v : Array<Dynamic>).keyValueIterator();
+		if( v.keyValueIterator != null ) v = v.keyValueIterator();
+		#else
+		try v = v.keyValueIterator() catch( e : Dynamic ) {};
 		#end
 		if( v.hasNext == null || v.next == null ) error(EInvalidIterator(v));
 		return v;
@@ -609,6 +668,21 @@ class Interp {
 		var it = makeIterator(expr(it));
 		while( it.hasNext() ) {
 			locals.set(n,{ r : it.next() });
+			if( !loopRun(() -> expr(e)) )
+				break;
+		}
+		restore(old);
+	}
+
+	function forKeyValueLoop(vk,vv,it,e) {
+		var old = declared.length;
+		declared.push({ n : vk, old : locals.get(vk) });
+		declared.push({ n : vv, old : locals.get(vv) });
+		var it = makeKeyValueIterator(expr(it));
+		while( it.hasNext() ) {
+			var v = it.next();
+			locals.set(vk,{ r : v.key });
+			locals.set(vv,{ r : v.value });
 			if( !loopRun(() -> expr(e)) )
 				break;
 		}
@@ -654,6 +728,8 @@ class Interp {
 			isAllObject = isAllObject && Reflect.isObject(key);
 			isAllEnum = isAllEnum && Reflect.isEnumValue(key);
 		}
+
+		#if (haxe_ver >= 4.1)
 		if( isAllInt ) {
 			var m = new Map<Int,Dynamic>();
 			for( i => key in keys )
@@ -678,6 +754,20 @@ class Interp {
 				m.set(key, values[i]);
 			return m;
 		}
+		#else
+		var m:Dynamic = {
+			if ( isAllInt ) new haxe.ds.IntMap<Dynamic>();
+			else if ( isAllString ) new haxe.ds.StringMap<Dynamic>();
+			else if ( isAllEnum ) new haxe.ds.EnumValueMap<Dynamic, Dynamic>();
+			else if ( isAllObject ) new haxe.ds.ObjectMap<Dynamic, Dynamic>();
+			else null;
+		}
+		if( m != null ) {
+			for ( n in 0...keys.length )
+				setMapValue(m, keys[n], values[n]);
+			return m;
+		}
+		#end
 		error(ECustom("Invalid map keys "+keys));
 		return null;
 	}
