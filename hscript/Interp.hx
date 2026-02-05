@@ -42,6 +42,7 @@ class Interp {
 
 	public var staticExtensions : Map<String, Function>;
 	public var variables : Map<String, Dynamic>;
+	public var onError:Error->Void;
 	var locals : Map<String, HScriptLocal>;
 	var binops : Map<String, Expr -> Expr -> Dynamic >;
 
@@ -292,6 +293,17 @@ class Interp {
 				returnValue = null;
 				return v;
 			}
+		} catch( e : Error ) {
+			if (onError != null)
+				onError(e);
+			else 
+				throw e;
+		} catch( e : haxe.Exception ) {
+			if (onError != null) {
+				var err = #if hscriptPos new Error(EException(e), curExpr.pmin, curExpr.pmax, curExpr.origin, curExpr.line); #else EException(e) #end
+				onError(err);
+			} else 
+				throw e;
 		}
 		return null;
 	}

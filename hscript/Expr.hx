@@ -120,6 +120,7 @@ enum Error {
 	EInvalidOp( op : String );
 	EInvalidAccess( f : String );
 	ECustom( msg : String );
+	EException( exp : haxe.Exception );
 }
 
 

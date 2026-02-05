@@ -370,6 +370,7 @@ class Printer {
 		return new Printer().exprToString(e);
 	}
 
+	public static var printFullException:Bool = false;
 	public static function errorToString( e : Expr.Error ) {
 		var message = switch( #if hscriptPos e.e #else e #end ) {
 			case EInvalidChar(c): "Invalid character: '"+(StringTools.isEof(c) ? "EOF" : String.fromCharCode(c))+"' ("+c+")";
@@ -382,6 +383,7 @@ class Printer {
 			case EInvalidOp(op): "Invalid operator: "+op;
 			case EInvalidAccess(f): "Invalid access to field " + f;
 			case ECustom(msg): msg;
+			case EException(exp): "In-Source Exception: " + (printFullException ? exp.details() : exp.message);
 		};
 		#if hscriptPos
 		return e.origin + ":" + e.line + ": " + message;
