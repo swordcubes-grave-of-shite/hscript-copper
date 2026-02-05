@@ -300,7 +300,7 @@ class Interp {
 				throw e;
 		} catch( e : haxe.Exception ) {
 			if (onError != null) {
-				var err = #if hscriptPos new Error(EException(e), curExpr.pmin, curExpr.pmax, curExpr.origin, curExpr.line); #else EException(e) #end
+				var err = #if hscriptPos new Error(EException(e), curExpr.pmin, curExpr.pmax, curExpr.origin, curExpr.line); #else EException(e); #end
 				onError(err);
 			} else 
 				throw e;
