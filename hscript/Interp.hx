@@ -294,16 +294,16 @@ class Interp {
 				return v;
 			}
 		} catch( e : Error ) {
-			if (onError != null)
+			if (!inTry && onError != null)
 				onError(e);
 			else 
 				throw e;
 		} catch( e : haxe.Exception ) {
-			if (onError != null) {
+			if (!inTry && onError != null) {
 				var err = #if hscriptPos new Error(EException(e), curExpr.pmin, curExpr.pmax, curExpr.origin, curExpr.line); #else EException(e); #end
 				onError(err);
-			} else 
-				throw e;
+			} else
+				throw e is haxe.ValueException ? cast(e, haxe.ValueException).value : e;
 		}
 		return null;
 	}
@@ -468,7 +468,7 @@ class Interp {
 								args2.push(args[pos++]);
 								extraParams--;
 							} else
-								args2.push(null);
+								args2.push(null); // TODO: expr(p.value), tho i want to make this smarter as well
 						} else
 							args2.push(args[pos++]);
 					args = args2;
