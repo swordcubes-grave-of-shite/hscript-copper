@@ -40,9 +40,16 @@ private enum Stop {
 
 class Interp {
 
-	public var staticExtensions : Map<String, Function>;
+    @:unreflective
+    public static var globalImportAliases : Map<String, Dynamic> = new Map<String, Dynamic>();
+
+    @:unreflective
+    public var importAliases : Map<String, Dynamic>;
+
+    public var staticExtensions : Map<String, Function>;
 	public var variables : Map<String, Dynamic>;
 	public var onError:Error->Void;
+
 	var locals : Map<String, HScriptLocal>;
 	var binops : Map<String, Expr -> Expr -> Dynamic >;
 
@@ -90,7 +97,8 @@ class Interp {
 	}
 
 	private function resetVariables(){
-		staticExtensions = new Map<String,Function>();
+		importAliases = new Map<String,Dynamic>();
+	    staticExtensions = new Map<String,Function>();
 
 		variables = new Map<String,Dynamic>();
 		variables.set("null",null);
@@ -296,7 +304,7 @@ class Interp {
 		} catch( e : Error ) {
 			if (!inTry && onError != null)
 				onError(e);
-			else 
+			else
 				throw e;
 		} catch( e : haxe.Exception ) {
 			if (!inTry && onError != null) {
@@ -599,8 +607,15 @@ class Interp {
 			return val;
 		case EImport(name, rename):
 			if ( rename == null ) rename = name.substring(name.lastIndexOf(".") + 1, name.length);
-
-			var cls : Dynamic = Type.resolveClass(name);
+			if ( globalImportAliases.exists(name) && globalImportAliases.get(name) == null ) {
+			    error(ECustom(name + " has been blocked from being imported!"));
+			}
+			if ( importAliases.exists(name) && importAliases.get(name) == null ) {
+			    error(ECustom(name + " has been blocked from being imported!"));
+			}
+			var cls : Dynamic = globalImportAliases.get(name);
+			if ( cls == null ) cls = importAliases.get(name);
+			if ( cls == null ) cls = Type.resolveClass(name);
 			if ( cls == null ) cls = Type.resolveEnum(name);
 			if ( cls == null) {
 				error(ECustom("Invalid Import: " + name));
