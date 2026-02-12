@@ -391,8 +391,29 @@ class Interp {
 
 	function resolve( id : String ) : Dynamic {
 		var v = variables.get(id);
+
+		if ( v == null && publicVariables.exists(id) )
+		    v = publicVariables.get(id);
+
+		if ( v == null && staticVariables.exists(id) )
+		    v = staticVariables.get(id);
+
+		if (v == null && scriptParent != null) {
+			if (id == "this") {
+				return scriptParent;
+			} else if ((Type.typeof(scriptParent) == TObject) && Reflect.hasField(scriptParent, id)) {
+				return Reflect.field(scriptParent, id);
+			} else {
+				if (__instanceFields.contains(id)) {
+					return Reflect.getProperty(scriptParent, id);
+				} else if (__instanceFields.contains('get_$id')) { // getter
+					return Reflect.getProperty(scriptParent, 'get_$id')();
+				}
+			}
+		}
 		if( v == null && !variables.exists(id) )
 			error(EUnknownVariable(id));
+
 		return v;
 	}
 
