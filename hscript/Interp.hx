@@ -40,15 +40,27 @@ private enum Stop {
 
 class Interp {
 
-    @:unreflective
-    public static var globalImportAliases : Map<String, Dynamic> = new Map<String, Dynamic>();
+	@:unreflective
+	public static var globalImportAliases : Map<String, Dynamic> = new Map<String, Dynamic>();
 
-    @:unreflective
-    public var importAliases : Map<String, Dynamic>;
+	@:unreflective
+	public var importAliases : Map<String, Dynamic>;
 
-    public var staticExtensions : Map<String, Function>;
+	public var staticExtensions : Map<String, Function>;
 	public var variables : Map<String, Dynamic>;
+	public var publicVariables : Map<String, Dynamic>;
+	public var staticVariables : Map<String, Dynamic>;
 	public var onError:Error->Void;
+
+	public var scriptParent(default, set): Dynamic = null;
+
+	@:noCompletion
+	private function set_scriptParent(v:Dynamic) : Dynamic {
+		__instanceFields = (v == null) ? [] : Type.getInstanceFields(Type.getClass(v));
+		return scriptParent = v;
+	}
+
+	var __instanceFields:Array<String> = [];
 
 	var locals : Map<String, HScriptLocal>;
 	var binops : Map<String, Expr -> Expr -> Dynamic >;
@@ -98,7 +110,10 @@ class Interp {
 
 	private function resetVariables(){
 		importAliases = new Map<String,Dynamic>();
-	    staticExtensions = new Map<String,Function>();
+		staticExtensions = new Map<String,Function>();
+
+		publicVariables = new Map<String,Dynamic>();
+		staticVariables = new Map<String,Dynamic>();
 
 		variables = new Map<String,Dynamic>();
 		variables.set("null",null);
@@ -163,33 +178,56 @@ class Interp {
 	}
 
 	function setVar( name : String, v : Dynamic ) {
-		variables.set(name, v);
+    	if (staticVariables.exists(name)) {
+    		staticVariables.set(name, v);
+    	} else if (publicVariables.exists(name)) {
+    		publicVariables.set(name, v);
+    	} else {
+    		variables.set(name, v);
+        }
 		return v;
 	}
 
 	function assign( e1 : Expr, e2 : Expr ) : Dynamic {
 		var v = expr(e2);
 		switch( Tools.expr(e1) ) {
-		case EIdent(id):
-			var l = locals.get(id);
-			if( l == null )
-				setVar(id,v)
-			else
-				l.r = v;
-		case EField(e,f):
-			v = set(expr(e),f,v);
-		case EArray(e, index):
-			var arr:Dynamic = expr(e);
-			var index:Dynamic = expr(index);
-			if (isMap(arr)) {
-				setMapValue(arr, index, v);
-			}
-			else {
-				arr[index] = v;
-			}
+			case EIdent(id):
+				var l = locals.get(id);
+				if (l == null) {
+					if (!variables.exists(id) && !staticVariables.exists(id) && !publicVariables.exists(id) && scriptParent != null) {
+						if (Type.typeof(scriptParent) == TObject) {
+							Reflect.setField(scriptParent, id, v);
+						} else {
+							if (__instanceFields.contains(id)) {
+								Reflect.setProperty(scriptParent, id, v);
+							} else if (__instanceFields.contains('set_$id')) { // setter
+								Reflect.getProperty(scriptParent, 'set_$id')(v);
+							} else {
+								setVar(id, v);
+							}
+						}
+					} else {
+						setVar(id, v);
+					}
+				} else {
+					l.r = v;
+					//if(depth == 0) // i noticed hscript-improved does this but is it actually needed?
+					//	setVar(id, v);
+				}
+			case EField(e,f):
+				v = set(expr(e),f,v);
+			case EArray(e, index):
+				var arr:Dynamic = expr(e);
+				var index:Dynamic = expr(index);
+				if (isMap(arr)) {
+					setMapValue(arr, index, v);
+				}
+				else {
+					arr[index] = v;
+				}
 
-		default:
-			error(EInvalidOp("="));
+			default:
+				error(EInvalidOp("="));
 		}
 		return v;
 	}
@@ -203,10 +241,17 @@ class Interp {
 		var v;
 		switch( Tools.expr(e1) ) {
 		case EIdent(id):
-			var l = locals.get(id);
-			v = fop(expr(e1),expr(e2));
-			if( l == null )
-				setVar(id,v)
+		    var l = locals.get(id);
+			v = fop(expr(e1), expr(e2));
+			if (l == null) {
+				if (__instanceFields.contains(id)) {
+					Reflect.setProperty(scriptParent, id, v);
+				} else if (__instanceFields.contains('set_$id')) { // setter
+					Reflect.getProperty(scriptParent, 'set_$id')(v);
+				} else {
+					setVar(id, v);
+				}
+			}
 			else
 				l.r = v;
 		case EField(e,f):
@@ -608,10 +653,10 @@ class Interp {
 		case EImport(name, rename):
 			if ( rename == null ) rename = name.substring(name.lastIndexOf(".") + 1, name.length);
 			if ( globalImportAliases.exists(name) && globalImportAliases.get(name) == null ) {
-			    error(ECustom(name + " has been blocked from being imported!"));
+				error(ECustom(name + " has been blocked from being imported!"));
 			}
 			if ( importAliases.exists(name) && importAliases.get(name) == null ) {
-			    error(ECustom(name + " has been blocked from being imported!"));
+				error(ECustom(name + " has been blocked from being imported!"));
 			}
 			var cls : Dynamic = globalImportAliases.get(name);
 			if ( cls == null ) cls = importAliases.get(name);
