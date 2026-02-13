@@ -283,7 +283,10 @@ class Interp {
 	}
 
 	public function execute( expr : Expr ) : Dynamic {
-		depth = 0;
+		depth = switch (expr) {
+			case EBlock(e): -1;
+			default: 0;
+		}
 		locals = new Map();
 		declared = new Array();
 		return exprReturn(expr);
@@ -370,7 +373,7 @@ class Interp {
 			return resolve(id);
 		case EVar(n,_,e):
 			if( depth == 0 )
-				variables.set(n, expr(e));
+				variables.set(n, (e == null)?null:expr(e));
 			else {
 				declared.push({ n : n, old : locals.get(n) });
 				locals.set(n,{ r : (e == null)?null:expr(e) });
@@ -379,6 +382,7 @@ class Interp {
 		case EParent(e):
 			return expr(e);
 		case EBlock(exprs):
+			++depth;
 			var old = declared.length;
 			var v = null;
 			for( e in exprs )
@@ -455,6 +459,10 @@ class Interp {
 			returnValue = e == null ? null : expr(e);
 			throw SReturn;
 		case EFunction(params,fexpr,name,_):
+			var depthInc = switch (fexpr) {
+				case EBlock(e): 0;
+				default: 1;
+			}
 			var capturedLocals = duplicate(locals);
 			var me = this;
 			var hasOpt = false, minParams = 0;
@@ -486,7 +494,7 @@ class Interp {
 					args = args2;
 				}
 				var old = me.locals, depth = me.depth;
-				me.depth++;
+				me.depth += depthInc;
 				me.locals = me.duplicate(capturedLocals);
 				for( i in 0...params.length )
 					me.locals.set(params[i].name,{ r : args[i] });
