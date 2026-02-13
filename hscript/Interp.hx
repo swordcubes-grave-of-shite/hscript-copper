@@ -311,7 +311,7 @@ class Interp {
 				var err = #if hscriptPos new Error(EException(e), curExpr.pmin, curExpr.pmax, curExpr.origin, curExpr.line); #else EException(e); #end
 				onError(err);
 			} else
-				throw e is haxe.ValueException ? cast(e, haxe.ValueException).value : e;
+				throw #if (haxe >= "4.3.0") e is haxe.ValueException ? cast(e, haxe.ValueException).value : #end e;
 		}
 		return null;
 	}
@@ -369,8 +369,12 @@ class Interp {
 				return l.r;
 			return resolve(id);
 		case EVar(n,_,e):
-			declared.push({ n : n, old : locals.get(n) });
-			locals.set(n,{ r : (e == null)?null:expr(e) });
+			if( depth == 0 )
+				variables.set(n, expr(e));
+			else {
+				declared.push({ n : n, old : locals.get(n) });
+				locals.set(n,{ r : (e == null)?null:expr(e) });
+			}
 			return null;
 		case EParent(e):
 			return expr(e);
