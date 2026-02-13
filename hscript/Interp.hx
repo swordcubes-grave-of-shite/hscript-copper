@@ -283,7 +283,7 @@ class Interp {
 	}
 
 	public function execute( expr : Expr ) : Dynamic {
-		depth = switch (expr) {
+		depth = switch (#if hscriptPos expr.e #else expr #end) {
 			case EBlock(e): -1;
 			default: 0;
 		}
@@ -459,7 +459,7 @@ class Interp {
 			returnValue = e == null ? null : expr(e);
 			throw SReturn;
 		case EFunction(params,fexpr,name,_):
-			var depthInc = switch (fexpr) {
+			var depthInc = switch (#if hscriptPos fexpr.e #else fexpr #end) {
 				case EBlock(e): 0;
 				default: 1;
 			}
