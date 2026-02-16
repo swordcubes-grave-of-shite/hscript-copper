@@ -328,7 +328,10 @@ class Interp {
 	}
 
 	public function execute( expr : Expr ) : Dynamic {
-		depth = 0;
+		depth = switch (#if hscriptPos expr.e #else expr #end) {
+			case EBlock(e): -1;
+			default: 0;
+		}
 		locals = new Map();
 		declared = new Array();
 		return exprReturn(expr);
@@ -356,7 +359,7 @@ class Interp {
 				var err = #if hscriptPos new Error(EException(e), curExpr.pmin, curExpr.pmax, curExpr.origin, curExpr.line); #else EException(e); #end
 				onError(err);
 			} else
-				throw e is haxe.ValueException ? cast(e, haxe.ValueException).value : e;
+				throw #if (haxe >= "4.3.0") e is haxe.ValueException ? cast(e, haxe.ValueException).value : #end e;
 		}
 		return null;
 	}
@@ -435,12 +438,17 @@ class Interp {
 				return l.r;
 			return resolve(id);
 		case EVar(n,_,e):
-			declared.push({ n : n, old : locals.get(n) });
-			locals.set(n,{ r : (e == null)?null:expr(e) });
+			if( depth == 0 )
+				variables.set(n, (e == null)?null:expr(e));
+			else {
+				declared.push({ n : n, old : locals.get(n) });
+				locals.set(n,{ r : (e == null)?null:expr(e) });
+			}
 			return null;
 		case EParent(e):
 			return expr(e);
 		case EBlock(exprs):
+			++depth;
 			var old = declared.length;
 			var v = null;
 			for( e in exprs )
@@ -517,6 +525,10 @@ class Interp {
 			returnValue = e == null ? null : expr(e);
 			throw SReturn;
 		case EFunction(params,fexpr,name,_):
+			var depthInc = switch (#if hscriptPos fexpr.e #else fexpr #end) {
+				case EBlock(e): 0;
+				default: 1;
+			}
 			var capturedLocals = duplicate(locals);
 			var me = this;
 			var hasOpt = false, minParams = 0;
@@ -548,7 +560,7 @@ class Interp {
 					args = args2;
 				}
 				var old = me.locals, depth = me.depth;
-				me.depth++;
+				me.depth += depthInc;
 				me.locals = me.duplicate(capturedLocals);
 				for( i in 0...params.length )
 					me.locals.set(params[i].name,{ r : args[i] });
