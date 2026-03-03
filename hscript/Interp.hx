@@ -437,10 +437,16 @@ class Interp {
 			if( l != null )
 				return l.r;
 			return resolve(id);
-		case EVar(n,_,e):
-			if( depth == 0 )
-				variables.set(n, (e == null)?null:expr(e));
-			else {
+		case EVar(n,_,e,isPublic,isStatic):
+			if( depth == 0 ) {
+                if(isStatic == true) {
+					if(!staticVariables.exists(n))
+						staticVariables.set(n, locals[n].r);
+				} else {
+    			    var vars:Map<String, Dynamic> = (isPublic) ? publicVariables : variables;
+    				vars.set(n, (e == null)?null:expr(e));
+				}
+			} else {
 				declared.push({ n : n, old : locals.get(n) });
 				locals.set(n,{ r : (e == null)?null:expr(e) });
 			}
@@ -524,7 +530,7 @@ class Interp {
 		case EReturn(e):
 			returnValue = e == null ? null : expr(e);
 			throw SReturn;
-		case EFunction(params,fexpr,name,_):
+		case EFunction(params,fexpr,name,_,isPublic,isStatic,isOverride):
 			var depthInc = switch (#if hscriptPos fexpr.e #else fexpr #end) {
 				case EBlock(e): 0;
 				default: 1;
@@ -590,7 +596,12 @@ class Interp {
 			if( name != null ) {
 				if( depth == 0 ) {
 					// global function
-					variables.set(name, f);
+					if(isStatic)
+					    staticVariables.set(name, f);
+					else {
+					    var vars:Map<String, Dynamic> = (isPublic) ? publicVariables : variables;
+						vars.set(name, f);
+					}
 				} else {
 					// function-in-function is a local function
 					declared.push( { n : name, old : locals.get(name) } );
