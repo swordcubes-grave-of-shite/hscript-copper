@@ -719,8 +719,8 @@ class Interp {
 			if( c == null ) c = resolve(name);
 
 			for (field in Type.getClassFields(c)) {
-				final func:Function = Reflection.getField(c, field);
-				if ( Reflection.isFunction(func) )
+				final func:Function = Reflect.getProperty(c, field);
+				if ( Reflect.isFunction(func) )
 					staticExtensions.set(field, func);
 			}
 		case EMeta(meta, args, e):
