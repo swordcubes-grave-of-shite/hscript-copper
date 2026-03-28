@@ -25,7 +25,6 @@ import haxe.PosInfos;
 import haxe.Constraints;
 
 import hscript.Expr;
-import hscript.util.Reflection;
 
 private enum Stop {
 	SBreak;
@@ -199,12 +198,12 @@ class Interp {
 				if (l == null) {
 					if (!variables.exists(id) && !staticVariables.exists(id) && !publicVariables.exists(id) && scriptParent != null) {
 						if (Type.typeof(scriptParent) == TObject) {
-							Reflection.setField(scriptParent, id, v);
+							Reflect.setField(scriptParent, id, v);
 						} else {
 							if (__instanceFields.contains(id)) {
-								Reflection.setField(scriptParent, id, v);
+								Reflect.setField(scriptParent, id, v);
 							} else if (__instanceFields.contains('set_$id')) { // setter
-								Reflection.getField(scriptParent, 'set_$id')(v);
+								Reflect.getField(scriptParent, 'set_$id')(v);
 							} else {
 								setVar(id, v);
 							}
@@ -248,9 +247,9 @@ class Interp {
 			v = fop(expr(e1), expr(e2));
 			if (l == null) {
 				if (__instanceFields.contains(id)) {
-					Reflection.setField(scriptParent, id, v);
+					Reflect.setField(scriptParent, id, v);
 				} else if (__instanceFields.contains('set_$id')) { // setter
-					Reflection.getField(scriptParent, 'set_$id')(v);
+					Reflect.getField(scriptParent, 'set_$id')(v);
 				} else {
 					setVar(id, v);
 				}
@@ -407,13 +406,13 @@ class Interp {
 		if (v == null && scriptParent != null) {
 			if (id == "this") {
 				return scriptParent;
-			} else if ((Type.typeof(scriptParent) == TObject) && Reflection.hasField(scriptParent, id)) {
-				return Reflection.getField(scriptParent, id);
+			} else if ((Type.typeof(scriptParent) == TObject) && Reflect.hasField(scriptParent, id)) {
+				return Reflect.getField(scriptParent, id);
 			} else {
 				if (__instanceFields.contains(id)) {
-					return Reflection.getField(scriptParent, id);
+					return Reflect.getField(scriptParent, id);
 				} else if (__instanceFields.contains('get_$id')) { // getter
-					return Reflection.getField(scriptParent, 'get_$id')();
+					return Reflect.getField(scriptParent, 'get_$id')();
 				}
 			}
 		}
@@ -903,7 +902,7 @@ class Interp {
 					Reflect.field(o, f);
 				}
 			#else
-				Reflection.getField(o, f);
+				Reflect.getField(o, f);
 			#end
 		};
 
@@ -912,7 +911,7 @@ class Interp {
 
 	function set( o : Dynamic, f : String, v : Dynamic ) : Dynamic {
 		if( o == null ) error(EInvalidAccess(f));
-		Reflection.setField(o,f,v);
+		Reflect.setField(o,f,v);
 		return v;
 	}
 
@@ -926,7 +925,7 @@ class Interp {
 	}
 
 	function call( o : Dynamic, f : Dynamic, args : Array<Dynamic> ) : Dynamic {
-		return Reflection.callMethod(o,f,args);
+		return Reflect.callMethod(o,f,args);
 	}
 
 	function cnew( cl : String, args : Array<Dynamic> ) : Dynamic {
