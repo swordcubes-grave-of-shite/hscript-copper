@@ -201,7 +201,7 @@ class Interp {
 							Reflect.setField(scriptParent, id, v);
 						} else {
 							if (__instanceFields.contains(id)) {
-								Reflect.setField(scriptParent, id, v);
+								Reflect.setProperty(scriptParent, id, v);
 							} else if (__instanceFields.contains('set_$id')) { // setter
 								Reflect.getProperty(scriptParent, 'set_$id')(v);
 							} else {
@@ -247,7 +247,7 @@ class Interp {
 			v = fop(expr(e1), expr(e2));
 			if (l == null) {
 				if (__instanceFields.contains(id)) {
-					Reflect.setField(scriptParent, id, v);
+					Reflect.setProperty(scriptParent, id, v);
 				} else if (__instanceFields.contains('set_$id')) { // setter
 					Reflect.getProperty(scriptParent, 'set_$id')(v);
 				} else {
@@ -407,7 +407,7 @@ class Interp {
 			if (id == "this") {
 				return scriptParent;
 			} else if ((Type.typeof(scriptParent) == TObject) && Reflect.hasField(scriptParent, id)) {
-				return Reflect.getProperty(scriptParent, id);
+				return Reflect.field(scriptParent, id);
 			} else {
 				if (__instanceFields.contains(id)) {
 					return Reflect.getProperty(scriptParent, id);
@@ -911,7 +911,7 @@ class Interp {
 
 	function set( o : Dynamic, f : String, v : Dynamic ) : Dynamic {
 		if( o == null ) error(EInvalidAccess(f));
-		Reflect.setField(o,f,v);
+		Reflect.setProperty(o,f,v);
 		return v;
 	}
 
