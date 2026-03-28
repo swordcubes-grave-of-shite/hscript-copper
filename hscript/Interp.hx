@@ -203,7 +203,7 @@ class Interp {
 							if (__instanceFields.contains(id)) {
 								Reflect.setField(scriptParent, id, v);
 							} else if (__instanceFields.contains('set_$id')) { // setter
-								Reflect.getField(scriptParent, 'set_$id')(v);
+								Reflect.getProperty(scriptParent, 'set_$id')(v);
 							} else {
 								setVar(id, v);
 							}
@@ -249,7 +249,7 @@ class Interp {
 				if (__instanceFields.contains(id)) {
 					Reflect.setField(scriptParent, id, v);
 				} else if (__instanceFields.contains('set_$id')) { // setter
-					Reflect.getField(scriptParent, 'set_$id')(v);
+					Reflect.getProperty(scriptParent, 'set_$id')(v);
 				} else {
 					setVar(id, v);
 				}
@@ -407,12 +407,12 @@ class Interp {
 			if (id == "this") {
 				return scriptParent;
 			} else if ((Type.typeof(scriptParent) == TObject) && Reflect.hasField(scriptParent, id)) {
-				return Reflect.getField(scriptParent, id);
+				return Reflect.getProperty(scriptParent, id);
 			} else {
 				if (__instanceFields.contains(id)) {
-					return Reflect.getField(scriptParent, id);
+					return Reflect.getProperty(scriptParent, id);
 				} else if (__instanceFields.contains('get_$id')) { // getter
-					return Reflect.getField(scriptParent, 'get_$id')();
+					return Reflect.getProperty(scriptParent, 'get_$id')();
 				}
 			}
 		}
@@ -902,7 +902,7 @@ class Interp {
 					Reflect.field(o, f);
 				}
 			#else
-				Reflect.getField(o, f);
+				Reflect.getProperty(o, f);
 			#end
 		};
 
