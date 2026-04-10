@@ -26,6 +26,8 @@ import haxe.Constraints;
 
 import hscript.Expr;
 
+using StringTools;
+
 private enum Stop {
 	SBreak;
 	SContinue;
@@ -422,6 +424,16 @@ class Interp {
 		return v;
 	}
 
+	public function isImportBlocked(className:String):Bool {
+    	if (globalImportAliases.exists(className) && globalImportAliases.get(className) == null) {
+       		return true;
+    	}
+    	if (importAliases.exists(className) && importAliases.get(className) == null) {
+       		return true;
+    	}
+        return false;
+	}
+
 	public function expr( e : Expr ) : Dynamic {
 		#if hscriptPos
 		curExpr = e;
@@ -698,21 +710,57 @@ class Interp {
 			return val;
 		case EImport(name, rename):
 			if ( rename == null ) rename = name.substring(name.lastIndexOf(".") + 1, name.length);
-			if ( globalImportAliases.exists(name) && globalImportAliases.get(name) == null ) {
-				error(ECustom(name + " has been blocked from being imported!"));
-			}
-			if ( importAliases.exists(name) && importAliases.get(name) == null ) {
+			if ( isImportBlocked(name) ) {
 				error(ECustom(name + " has been blocked from being imported!"));
 			}
 			var cls : Dynamic = globalImportAliases.get(name);
 			if ( cls == null ) cls = importAliases.get(name);
 			if ( cls == null ) cls = Type.resolveClass(name);
-			if ( cls == null ) cls = Type.resolveEnum(name);
-			if ( cls == null) {
-				error(ECustom("Invalid Import: " + name));
+
+			var en : Enum<Dynamic> = (globalImportAliases.get(name) != null && globalImportAliases.get(name) is Enum) ? globalImportAliases.get(name) : null;
+			if ( en == null ) en = (importAliases.get(name) != null && importAliases.get(name) is Enum) ? importAliases.get(name) : null;
+			if ( en == null ) en = Type.resolveEnum(name);
+
+			if ( cls == null && en == null ) {
+    			// Allow for package.MyClass.ThingInsideThisClass instead of only package.ThingInsideThisClass
+    			var splitClassName = [for (e in name.split(".")) e.trim()];
+                splitClassName.splice(-2, 1);
+
+                var realClassName = splitClassName.join(".");
+                if ( isImportBlocked(realClassName) )
+                    error(ECustom(realClassName + " has been blocked from being imported!"));
+
+                cls = Type.resolveClass(realClassName);
+				en = Type.resolveEnum(realClassName);
 			}
 
-			variables.set(rename, cls);
+			if ( cls == null && en == null ) {
+				error(ECustom("Invalid Import: " + name));
+			}
+			else {
+                if (en != null) {
+    				// create a wrapper over the enum
+                    // using the enum directly doesn't work correctly
+    				var enumWrapper:Dynamic = {
+                        getConstructors: en.getConstructors,
+                        createByName: en.createByName,
+                    };
+    				for (c in en.getConstructors()) {
+    					try {
+    						Reflect.setField(enumWrapper, c, en.createByName(c));
+    					} catch(e) {
+    						try {
+    							Reflect.setField(enumWrapper, c, Reflect.field(en, c));
+    						} catch(ex) {
+    							throw e;
+    						}
+    					}
+    				}
+    				variables.set(rename, enumWrapper);
+    			} else
+    				variables.set(rename, cls);
+			}
+
 		case EUsing(name):
 			var c = Type.resolveClass(name);
 			if( c == null ) c = resolve(name);
