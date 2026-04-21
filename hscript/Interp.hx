@@ -200,12 +200,12 @@ class Interp {
 				if (l == null) {
 					if (!variables.exists(id) && !staticVariables.exists(id) && !publicVariables.exists(id) && scriptParent != null) {
 						if (Type.typeof(scriptParent) == TObject) {
-							Reflect.setField(scriptParent, id, v);
+							FastReflect.setField(scriptParent, id, v);
 						} else {
 							if (__instanceFields.contains(id)) {
-								Reflect.setProperty(scriptParent, id, v);
+								FastReflect.setProperty(scriptParent, id, v);
 							} else if (__instanceFields.contains('set_$id')) { // setter
-								Reflect.getProperty(scriptParent, 'set_$id')(v);
+								FastReflect.getProperty(scriptParent, 'set_$id')(v);
 							} else {
 								setVar(id, v);
 							}
@@ -249,9 +249,9 @@ class Interp {
 			v = fop(expr(e1), expr(e2));
 			if (l == null) {
 				if (__instanceFields.contains(id)) {
-					Reflect.setProperty(scriptParent, id, v);
+					FastReflect.setProperty(scriptParent, id, v);
 				} else if (__instanceFields.contains('set_$id')) { // setter
-					Reflect.getProperty(scriptParent, 'set_$id')(v);
+					FastReflect.getProperty(scriptParent, 'set_$id')(v);
 				} else {
 					setVar(id, v);
 				}
@@ -408,13 +408,13 @@ class Interp {
 		if (v == null && scriptParent != null) {
 			if (id == "this") {
 				return scriptParent;
-			} else if ((Type.typeof(scriptParent) == TObject) && Reflect.hasField(scriptParent, id)) {
-				return Reflect.field(scriptParent, id);
+			} else if ((Type.typeof(scriptParent) == TObject) && FastReflect.hasField(scriptParent, id)) {
+				return FastReflect.field(scriptParent, id);
 			} else {
 				if (__instanceFields.contains(id)) {
-					return Reflect.getProperty(scriptParent, id);
+					return FastReflect.getProperty(scriptParent, id);
 				} else if (__instanceFields.contains('get_$id')) { // getter
-					return Reflect.getProperty(scriptParent, 'get_$id')();
+					return FastReflect.getProperty(scriptParent, 'get_$id')();
 				}
 			}
 		}
@@ -747,10 +747,10 @@ class Interp {
                     };
     				for (c in en.getConstructors()) {
     					try {
-    						Reflect.setField(enumWrapper, c, en.createByName(c));
+    						FastReflect.setField(enumWrapper, c, en.createByName(c));
     					} catch(e) {
     						try {
-    							Reflect.setField(enumWrapper, c, Reflect.field(en, c));
+    							FastReflect.setField(enumWrapper, c, FastReflect.field(en, c));
     						} catch(ex) {
     							throw e;
     						}
@@ -945,12 +945,12 @@ class Interp {
 			#if php
 				// https://github.com/HaxeFoundation/haxe/issues/4915
 				try {
-					Reflect.getProperty(o, f);
+					FastReflect.getProperty(o, f);
 				} catch (e:Dynamic) {
-					Reflect.field(o, f);
+					FastReflect.field(o, f);
 				}
 			#else
-				Reflect.getProperty(o, f);
+				FastReflect.getProperty(o, f);
 			#end
 		};
 
@@ -959,7 +959,7 @@ class Interp {
 
 	function set( o : Dynamic, f : String, v : Dynamic ) : Dynamic {
 		if( o == null ) error(EInvalidAccess(f));
-		Reflect.setProperty(o,f,v);
+		FastReflect.setProperty(o,f,v);
 		return v;
 	}
 
@@ -973,7 +973,7 @@ class Interp {
 	}
 
 	function call( o : Dynamic, f : Dynamic, args : Array<Dynamic> ) : Dynamic {
-		return Reflect.callMethod(o,f,args);
+		return FastReflect.callMethod(o,f,args);
 	}
 
 	function cnew( cl : String, args : Array<Dynamic> ) : Dynamic {
