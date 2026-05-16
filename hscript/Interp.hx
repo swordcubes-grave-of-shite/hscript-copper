@@ -168,6 +168,7 @@ class Interp {
 			var v1 : Dynamic = me.expr(e1);
 			return if( v1 != null ) v1 else me.expr(e2);
 		});
+		assignOp("??=", function(v1, v2) return v1 == null ? v2 : v1);
 		assignOp("+=",function(v1:Dynamic,v2:Dynamic) return v1 + v2);
 		assignOp("-=",function(v1:Float,v2:Float) return v1 - v2);
 		assignOp("*=",function(v1:Float,v2:Float) return v1 * v2);

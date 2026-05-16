@@ -119,7 +119,7 @@ class Parser {
 			["..."],
 			["&&"],
 			["||"],
-			["=","+=","-=","*=","/=","%=","<<=",">>=",">>>=","|=","&=","^=","=>"],
+			["=","+=","-=","*=","/=","%=","<<=",">>=",">>>=","|=","&=","^=","=>","??="],
 			["->"],
 			["in","is"]
 		];
@@ -1858,8 +1858,15 @@ class Parser {
 				char = readChar();
 				if( char == ".".code )
 					return TQuestionDot;
-				if( char == "?".code )
+				
+				if( char == "?".code ) {
+					var orp = readPos;
+					if( readChar() == "=".code )
+						return TOp("??=");
+
+					this.readPos = orp;
 					return TOp("??");
+				}
 				this.char = char;
 				return TQuestion;
 			case ":".code: return TDoubleDot;
